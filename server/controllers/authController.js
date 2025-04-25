@@ -61,13 +61,66 @@ export const signin = async (req, res) => {
   }
 };
 
-export const logout = (req, res) => {
-  res
-    .clearCookie("token", {
+export const logout = async (req, res) => {
+  try {
+    res.clearCookie('token', {
       httpOnly: true,
       secure: true,
-      sameSite: "strict",
-    })
-    .status(200)
-    .json({ message: "Logout Successful" });
+      sameSite: 'strict'
+    });
+    
+    res.status(200).json({ 
+      success: true,
+      message: 'User has been logged out' 
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      success: false,
+      message: 'Error logging out',
+      error: error.message 
+    });
+  }
 };
+
+export const google= async(req,res,next)=>{
+  try {
+    const user= await User.findOne({email:req.body.email});
+    if(user){
+      const token= jwt.sign({id:user._id},process.env.JWT_SECRET);
+      const {password:hashedPassword, ...rest}= user._doc;
+      const expiryDate= new Date(Date.now()+3600000); // 1 hr
+
+      res.cookie("token",token,{
+        httpOnly:true,
+        expires: expiryDate
+      })
+      .status(200).json(rest);
+    }
+    else{
+      const generatedPassword= Math.random().toString(36).slice(-8)+ Math.random().toString(36).slice(-8);
+
+      const hashedPassword= await bcrypt.hash(generatedPassword,10);
+      const newUser= new User({
+        username: req.body.name.split(" ").join("").toLowerCase()+
+        Math.random().toString(36).slice(-8),
+        email: req.body.email,
+        password: hashedPassword,
+        profilePicture: req.body.picture
+      });
+
+      await newUser.save();
+      const token= jwt.sign({id: newUser._id}, process.env.JWT_SECRET);
+      const {password:hashedPassword2, ...rest}= newUser._doc;
+      const expiryDate= new Date(Date.now()+3600000);
+
+      res.cookie("token",token,{
+        httpOnly:true,
+        expires: expiryDate
+      })
+      .status(200).json(rest);
+    }
+  } catch (error) {
+       next(error);
+       console.log(error)
+  }
+}
